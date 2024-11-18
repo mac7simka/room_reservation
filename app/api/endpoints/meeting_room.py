@@ -7,10 +7,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.validators import check_meeting_room_exists, check_name_duplicate
 from app.core.db import get_async_session
 from app.crud.meeting_room import meeting_room_crud
+from app.crud.reservation import reservation_crud
 from app.models.meeting_room import MeetingRoom
 from app.schemas.meeting_room import (
-    MeetingRoomCreate, MeetingRoomDB, MeetingRoomUpdate
+    MeetingRoomCreate,
+    MeetingRoomDB,
+    MeetingRoomUpdate,
 )
+from app.schemas.reservation import ReservationDB
 
 
 router = APIRouter()
@@ -22,8 +26,8 @@ router = APIRouter()
     response_model_exclude_none=True,
 )
 async def create_new_meeting_room(
-        meeting_room: MeetingRoomCreate,
-        session: AsyncSession = Depends(get_async_session),
+    meeting_room: MeetingRoomCreate,
+    session: AsyncSession = Depends(get_async_session),
 ):
     # Выносим проверку дубликата имени в отдельную корутину.
     # Если такое имя уже существует, то будет вызвана ошибка HTTPException
@@ -34,10 +38,8 @@ async def create_new_meeting_room(
 
 
 @router.get(
-        '/',
-        response_model=list[MeetingRoomDB],
-        response_model_exclude_none=True
-    )
+    '/', response_model=list[MeetingRoomDB], response_model_exclude_none=True
+)
 async def get_all_meeting_rooms(
     session: AsyncSession = Depends(get_async_session),
 ) -> list[MeetingRoom]:
@@ -51,14 +53,12 @@ async def get_all_meeting_rooms(
     response_model_exclude_none=True,
 )
 async def partially_update_meeting_room(
-        meeting_room_id: int,
-        obj_in: MeetingRoomUpdate,
-        session: AsyncSession = Depends(get_async_session),
+    meeting_room_id: int,
+    obj_in: MeetingRoomUpdate,
+    session: AsyncSession = Depends(get_async_session),
 ):
     # Выносим повторяющийся код в отдельную корутину.
-    meeting_room = await check_meeting_room_exists(
-        meeting_room_id, session
-    )
+    meeting_room = await check_meeting_room_exists(meeting_room_id, session)
 
     if obj_in.name is not None:
         await check_name_duplicate(obj_in.name, session)
@@ -75,12 +75,24 @@ async def partially_update_meeting_room(
     response_model_exclude_none=True,
 )
 async def remove_meeting_room(
-        meeting_room_id: int,
-        session: AsyncSession = Depends(get_async_session),
+    meeting_room_id: int,
+    session: AsyncSession = Depends(get_async_session),
 ):
-    # Выносим повторяющийся код в отдельную корутину.
-    meeting_room = await check_meeting_room_exists(
-        meeting_room_id, session
-    )
+    meeting_room = await check_meeting_room_exists(meeting_room_id, session)
     meeting_room = await meeting_room_crud.remove(meeting_room, session)
     return meeting_room
+
+
+@router.get(
+    '/{meeting_room_id}/reservations',
+    response_model=list[ReservationDB],
+)
+async def get_reservations_for_room(
+    meeting_room_id,
+    session: AsyncSession = Depends(get_async_session),
+) -> list[MeetingRoom]:
+    all_rooms = await reservation_crud.get_future_reservations_for_room(
+        room_id=meeting_room_id,
+        session=session
+    )
+    return all_rooms
